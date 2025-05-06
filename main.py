@@ -19,39 +19,16 @@ def pdf_to_text(file_path):
             text += page_text + "\n"
     return text
 
-def split_text(text, max_chars=40000):
-    """Divide el texto en bloques de tamaño razonable para gTTS."""
-    paragraphs = text.split("\n")
-    chunks = []
-    current_chunk = ""
-    for para in paragraphs:
-        if len(current_chunk) + len(para) + 1 < max_chars:
-            current_chunk += para + "\n"
-        else:
-            chunks.append(current_chunk.strip())
-            current_chunk = para + "\n"
-    if current_chunk:
-        chunks.append(current_chunk.strip())
-    return chunks
 
 def text_to_speech_chunks(text, output_file="output.mp3", lang="es"):
     print("Convirtiendo texto a audio por fragmentos...")
-    chunks = split_text(text)
-    temp_files = []
 
-    for i, chunk in enumerate(tqdm(chunks, desc="Convirtiendo a audio", unit="fragmento")):
-        tts = gTTS(text=chunk, lang=lang)
-        temp_path = tempfile.mktemp(suffix=".mp3")
-        tts.save(temp_path)
-        temp_files.append(temp_path)
+    tts = gTTS(text=text, lang=lang)
+    temp_path = tempfile.mktemp(suffix=".mp3")
+    tts.save(temp_path)
+    file = AudioSegment.from_mp3(temp_path)
+    file.export(output_file, format="mp3")
 
-    print("Unificando fragmentos de audio...")
-    combined = AudioSegment.empty()
-    for temp_file in temp_files:
-        combined += AudioSegment.from_mp3(temp_file)
-        os.remove(temp_file)
-
-    combined.export(output_file, format="mp3")
     print(f"Audio final guardado como: {output_file}")
 
 def convert_file_to_audio(file_path):
@@ -69,5 +46,5 @@ def convert_file_to_audio(file_path):
         print("No se pudo extraer texto legible del archivo.")
 
 if __name__ == "__main__":
-    archivo = "ejemplo2.pdf"  # Cambia por tu archivo
+    archivo = "marcos_ana.pdf"  # Cambia por tu archivo
     convert_file_to_audio(archivo)

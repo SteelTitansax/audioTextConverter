@@ -19,7 +19,7 @@ def pdf_to_text(file_path):
             text += page_text + "\n"
     return text
 
-def split_text(text, max_chars=4000):
+def split_text(text, max_chars=40000):
     """Divide el texto en bloques de tamaño razonable para gTTS."""
     paragraphs = text.split("\n")
     chunks = []

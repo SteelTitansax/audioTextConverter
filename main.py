@@ -1,83 +1,91 @@
-from docx import Document
-from PyPDF2 import PdfReader
-from TTS.api import TTS
-from tqdm import tqdm
-from pydub import AudioSegment
 import os
-import tempfile
-import time
+import textwrap
+from gtts import gTTS
+from docx import Document
+import PyPDF2
 
-# Cargar el modelo de TTS (puedes cambiar el nombre por otro si deseas)
-tts = TTS(model_name="tts_models/es/mai/tacotron2-DDC", progress_bar=True, gpu=False)
+LIMITE_PALABRAS = 150000
 
-def docx_to_text(file_path):
-    doc = Document(file_path)
-    return "\n".join([para.text for para in tqdm(doc.paragraphs, desc="Leyendo DOCX", unit="párrafo")])
+def extraer_texto_pdf(ruta):
+    texto = ""
+    with open(ruta, 'rb') as f:
+        lector = PyPDF2.PdfReader(f)
+        for pagina in lector.pages:
+            texto += pagina.extract_text() + "\n"
+    return texto
 
-def pdf_to_text(file_path):
-    reader = PdfReader(file_path)
-    text = ""
-    for page in tqdm(reader.pages, desc="Leyendo PDF", unit="página"):
-        page_text = page.extract_text()
-        if page_text:
-            text += page_text + "\n"
-    return text
+def extraer_texto_docx(ruta):
+    doc = Document(ruta)
+    return "\n".join([p.text for p in doc.paragraphs])
 
-def dividir_texto(texto, max_length=4000):
+def dividir_en_volumenes(texto):
     palabras = texto.split()
-    fragmentos, fragmento = [], ""
-    for palabra in palabras:
-        if len(fragmento) + len(palabra) + 1 < max_length:
-            fragmento += palabra + " "
-        else:
-            fragmentos.append(fragmento.strip())
-            fragmento = palabra + " "
-    if fragmento:
-        fragmentos.append(fragmento.strip())
-    return fragmentos
+    volumenes = []
+    for i in range(0, len(palabras), LIMITE_PALABRAS):
+        volumen = " ".join(palabras[i:i+LIMITE_PALABRAS])
+        volumenes.append(volumen)
+    return volumenes
 
-def generar_audio_coqui(texto, path_temp):
-    try:
-        tts.tts_to_file(text=texto, file_path=path_temp)
-        return True
-    except Exception as e:
-        print(f"Error al generar audio con Coqui TTS: {e}")
-        return False
+def guardar_volumenes(volumenes, nombre_base):
+    for i, vol in enumerate(volumenes):
+        nombre_archivo = f"{nombre_base}_volumen_{i+1}.txt"
+        with open(nombre_archivo, "w", encoding="utf-8") as f:
+            f.write(vol)
+        print(f"Guardado: {nombre_archivo}")
 
-def text_to_speech_chunks(text, output_file="output.mp3"):
-    fragmentos = dividir_texto(text)
-    print(f"Convirtiendo texto a audio por fragmentos... Total: {len(fragmentos)}")
+def convertir_a_audio(archivo_txt):
+    with open(archivo_txt, "r", encoding="utf-8") as f:
+        texto = f.read()
 
-    audio_final = AudioSegment.empty()
+    trozos = textwrap.wrap(texto, 4000)
+    for i, t in enumerate(trozos):
+        tts = gTTS(text=t, lang='es', slow=False)
+        salida = archivo_txt.replace(".txt", f"_parte_{i+1}.mp3")
+        tts.save(salida)
+        print(f"Audio guardado: {salida}")
 
-    for i, fragmento in enumerate(tqdm(fragmentos, desc="Procesando fragmentos", unit="fragmento")):
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-            exito = generar_audio_coqui(fragmento, temp_audio.name)
-            if exito:
-                audio = AudioSegment.from_wav(temp_audio.name)
-                audio_final += audio
+def menu():
+    while True:
+        print("\n--- Conversor de Texto a Audio ---")
+        print("1. Dividir PDF o DOCX en volúmenes de texto")
+        print("2. Convertir archivo .txt en audio")
+        print("3. Salir")
+        opcion = input("Elige una opción (1/2/3): ")
+
+        if opcion == "1":
+            ruta = input("Ruta al archivo PDF o DOCX: ").strip()
+            if not os.path.isfile(ruta):
+                print("Archivo no encontrado.")
+                continue
+            if ruta.endswith(".pdf"):
+                texto = extraer_texto_pdf(ruta)
+            elif ruta.endswith(".docx"):
+                texto = extraer_texto_docx(ruta)
             else:
-                print(f"Error en el fragmento {i}, se omitirá.")
-            os.remove(temp_audio.name)
-            time.sleep(0.1)
+                print("Formato no compatible.")
+                continue
 
-    audio_final.export(output_file, format="mp3")
-    print(f"Audio final guardado como: {output_file}")
+            if not texto.strip():
+                print("El archivo no contiene texto legible.")
+                continue
 
-def convert_file_to_audio(file_path):
-    if file_path.endswith(".docx"):
-        text = docx_to_text(file_path)
-    elif file_path.endswith(".pdf"):
-        text = pdf_to_text(file_path)
-    else:
-        raise ValueError("Formato no compatible. Solo se aceptan .docx y .pdf")
+            volumenes = dividir_en_volumenes(texto)
+            base = os.path.splitext(os.path.basename(ruta))[0]
+            guardar_volumenes(volumenes, base)
+            print(f"{len(volumenes)} volúmenes guardados.")
+        
+        elif opcion == "2":
+            ruta_txt = input("Ruta al archivo .txt: ").strip()
+            if not os.path.isfile(ruta_txt) or not ruta_txt.endswith(".txt"):
+                print("Archivo inválido.")
+                continue
+            convertir_a_audio(ruta_txt)
 
-    if text.strip():
-        output_name = os.path.splitext(os.path.basename(file_path))[0] + "_coqui.mp3"
-        text_to_speech_chunks(text, output_file=output_name)
-    else:
-        print("No se pudo extraer texto legible del archivo.")
+        elif opcion == "3":
+            print("Saliendo del programa.")
+            break
+        else:
+            print("Opción inválida.")
 
 if __name__ == "__main__":
-    archivo = input("Introduce la ruta del archivo .docx o .pdf: ").strip()
-    convert_file_to_audio(archivo)
+    menu()

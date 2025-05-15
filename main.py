@@ -3,8 +3,10 @@ import textwrap
 from gtts import gTTS
 from docx import Document
 import PyPDF2
+from ebooklib import epub, ITEM_DOCUMENT
+from bs4 import BeautifulSoup
 
-LIMITE_PALABRAS = 150000
+LIMITE_PALABRAS = 70000
 
 def extraer_texto_pdf(ruta):
     texto = ""
@@ -17,6 +19,15 @@ def extraer_texto_pdf(ruta):
 def extraer_texto_docx(ruta):
     doc = Document(ruta)
     return "\n".join([p.text for p in doc.paragraphs])
+
+def extraer_texto_epub(ruta):
+    texto = ""
+    libro = epub.read_epub(ruta)
+    for item in libro.get_items():
+        if item.get_type() == ITEM_DOCUMENT:
+            soup = BeautifulSoup(item.get_content(), 'html.parser')
+            texto += soup.get_text() + "\n"
+    return texto
 
 def dividir_en_volumenes(texto):
     palabras = texto.split()
@@ -47,20 +58,24 @@ def convertir_a_audio(archivo_txt):
 def menu():
     while True:
         print("\n--- Conversor de Texto a Audio ---")
-        print("1. Dividir PDF o DOCX en volúmenes de texto")
+        print("1. Dividir PDF, DOCX o EPUB en volúmenes de texto")
         print("2. Convertir archivo .txt en audio")
         print("3. Salir")
         opcion = input("Elige una opción (1/2/3): ")
 
         if opcion == "1":
-            ruta = input("Ruta al archivo PDF o DOCX: ").strip()
+            ruta = input("Ruta al archivo PDF, DOCX o EPUB: ").strip()
             if not os.path.isfile(ruta):
                 print("Archivo no encontrado.")
                 continue
-            if ruta.endswith(".pdf"):
+
+            texto = ""
+            if ruta.lower().endswith(".pdf"):
                 texto = extraer_texto_pdf(ruta)
-            elif ruta.endswith(".docx"):
+            elif ruta.lower().endswith(".docx"):
                 texto = extraer_texto_docx(ruta)
+            elif ruta.lower().endswith(".epub"):
+                texto = extraer_texto_epub(ruta)
             else:
                 print("Formato no compatible.")
                 continue
@@ -73,7 +88,7 @@ def menu():
             base = os.path.splitext(os.path.basename(ruta))[0]
             guardar_volumenes(volumenes, base)
             print(f"{len(volumenes)} volúmenes guardados.")
-        
+
         elif opcion == "2":
             ruta_txt = input("Ruta al archivo .txt: ").strip()
             if not os.path.isfile(ruta_txt) or not ruta_txt.endswith(".txt"):

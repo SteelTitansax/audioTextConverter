@@ -6,7 +6,7 @@ import PyPDF2
 from ebooklib import epub, ITEM_DOCUMENT
 from bs4 import BeautifulSoup
 
-LIMITE_PALABRAS = 70000
+LIMITE_PALABRAS = 20000  
 
 def extraer_texto_pdf(ruta):
     texto = ""
@@ -44,16 +44,28 @@ def guardar_volumenes(volumenes, nombre_base):
             f.write(vol)
         print(f"Guardado: {nombre_archivo}")
 
+def obtener_siguiente_parte(base_nombre):
+    i = 1
+    while os.path.exists(f"{base_nombre}_parte_{i}.mp3"):
+        i += 1
+    return i
+
 def convertir_a_audio(archivo_txt):
     with open(archivo_txt, "r", encoding="utf-8") as f:
         texto = f.read()
 
     trozos = textwrap.wrap(texto, 4000)
+    base_salida = archivo_txt.replace(".txt", "")
+    siguiente_parte = obtener_siguiente_parte(base_salida)
+
     for i, t in enumerate(trozos):
         tts = gTTS(text=t, lang='es', slow=False)
-        salida = archivo_txt.replace(".txt", f"_parte_{i+1}.mp3")
+        salida = f"{base_salida}_parte_{siguiente_parte + i}.mp3"
         tts.save(salida)
         print(f"Audio guardado: {salida}")
+
+    os.remove(archivo_txt)
+    print(f"Archivo eliminado: {archivo_txt}")
 
 def menu():
     while True:
